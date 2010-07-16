@@ -2,7 +2,8 @@
   (:require [clojure.contrib.str-utils2 :as str-utils2]
             [clojure.contrib.str-utils :as str-utils]
             [name.choi.joshua.fnparse :as fnparse]
-            [clojure.contrib.error-kit :as error-kit]))
+            [clojure.contrib.error-kit :as error-kit]
+            [clojure.contrib.seq-utils :as seq-utils]))
 
 (defstruct node-s :kind :content)
 (defstruct state-s :remainder :column :line)
@@ -108,12 +109,14 @@
      (fnparse/constant-semantics (fnparse/lit-conc-seq "msgid" nb-char-lit)
                                  (make-scalar-node "msgid")))
 
+(def msg-entry
+     (fnparse/rep+ (fnparse/alt string-lit line-break)))
+
 (def msgid-entry
      (fnparse/complex [_ msgid-lit
-                       _ (fnparse/rep+ space)
-                       contents string-lit
-                       _ line-break]
-                      (-> contents apply-str make-msgid-node)))
+                       _ space
+                       contents msg-entry]
+                      (-> (filter string? contents) apply-str make-msgid-node)))
 
 (def msgstr-lit
      (fnparse/constant-semantics (fnparse/lit-conc-seq "msgstr" nb-char-lit)
@@ -121,48 +124,72 @@
 
 (def msgstr-entry
      (fnparse/complex [_ msgstr-lit
-                       _ (fnparse/rep+ space)
-                       contents string-lit
-                       _ (fnparse/rep* line-break)]
-                      (-> contents apply-str make-msgstr-node)))
+                       _ space
+                       contents msg-entry]
+                      (-> (filter string? contents) apply-str make-msgstr-node)))
+
+(def meta-content
+     (fnparse/rep+ (fnparse/except pofile-char line-break)))
 
 (def comment-lit
      (fnparse/constant-semantics (fnparse/lit-conc-seq "#." nb-char-lit)
                                  (make-scalar-node "#.")))
 
-(def comment-content
-     (fnparse/rep+ (fnparse/except pofile-char line-break)))
-
 (def comment-entry
-     (fnparse/complex [_ comment-lit
-                       _ space
-                       contents comment-content
-                       _ line-break]
-                      (-> contents apply-str make-comment-node)))
+     (fnparse/rep* (fnparse/complex [_ comment-lit
+                                     _ space
+                                     contents meta-content
+                                     _ line-break]
+                                    (apply-str contents))))
 
 (def reference-lit
      (fnparse/constant-semantics (fnparse/lit-conc-seq "#:" nb-char-lit)
                                  (make-scalar-node "#:")))
 
 (def reference-entry
-     (fnparse/complex [_ reference-lit
-                       _ space
-                       contents comment-content
-                       _ line-break]
-                      (-> contents apply-str make-reference-node)))
+     (fnparse/rep* (fnparse/complex [_ reference-lit
+                                     _ space
+                                     contents meta-content
+                                     _ line-break]
+                                    (apply-str contents))))
+
+(def tcomment-lit
+     (fnparse/constant-semantics (fnparse/lit-conc-seq "#" nb-char-lit)
+                                 (make-scalar-node "#")))
+
+(def tcomment-entry
+     (fnparse/rep* (fnparse/complex [_ tcomment-lit
+                                     _ space
+                                     contents meta-content
+                                     _ line-break]
+                                    (apply-str contents))))
+
+(def flag-lit
+     (fnparse/constant-semantics (fnparse/lit-conc-seq "#," nb-char-lit)
+                                 (make-scalar-node "#,")))
+
+(def flag-entry
+     (fnparse/rep*
+      (fnparse/complex [_ flag-lit
+                        _ space
+                        contents meta-content
+                        _ line-break]
+                       (apply-str contents))))
 
 (def poentry
-     (fnparse/conc comment-entry
+     (fnparse/conc tcomment-entry
+                   comment-entry
                    reference-entry
+                   flag-entry
                    msgid-entry
                    msgstr-entry))
 
 (def pofile
-     poentry)
+     (fnparse/rep* poentry))
 
 (defn parse [tokens]
   (binding [fnparse/*remainder-accessor* remainder-a]
-    (fnparse/rule-match poentry
+    (fnparse/rule-match pofile
                         #(error-kit/raise parse-error "invalid document \"%s\""
                                 (apply-str (remainder-a %)))
                         #(error-kit/raise parse-error "leftover data after a valid node \"%s\""
