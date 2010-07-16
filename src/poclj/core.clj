@@ -5,7 +5,13 @@
             [clojure.contrib.error-kit :as error-kit]
             [clojure.contrib.seq-utils :as seq-utils]))
 
-(defstruct node-s :kind :content)
+(defstruct node-s
+  :tcomment
+  :comment
+  :reference
+  :msgid
+  :msgstr)
+
 (defstruct state-s :remainder :column :line)
 
 (def remainder-a
@@ -13,21 +19,6 @@
 
 (def make-node
      (partial struct node-s))
-
-(def make-scalar-node
-     (partial make-node :scalar))
-
-(def make-msgid-node
-     (partial make-node :msgid))
-
-(def make-msgstr-node
-     (partial make-node :msgstr))
-
-(def make-comment-node
-     (partial make-node :comment))
-
-(def make-reference-node
-     (partial make-node :reference))
 
 (defn- nb-char [subrule]
   (fnparse/invisi-conc subrule (fnparse/update-info :column inc)))
@@ -106,8 +97,7 @@
                       (-> contents apply-str)))
 
 (def msgid-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "msgid" nb-char-lit)
-                                 (make-scalar-node "msgid")))
+     (fnparse/lit-conc-seq "msgid" nb-char-lit))
 
 (def msg-entry
      (fnparse/rep+ (fnparse/alt string-lit line-break)))
@@ -116,24 +106,22 @@
      (fnparse/complex [_ msgid-lit
                        _ space
                        contents msg-entry]
-                      (-> (filter string? contents) apply-str make-msgid-node)))
+                      (-> (filter string? contents) apply-str)))
 
 (def msgstr-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "msgstr" nb-char-lit)
-                                 (make-scalar-node "msgstr")))
+     (fnparse/lit-conc-seq "msgstr" nb-char-lit))
 
 (def msgstr-entry
      (fnparse/complex [_ msgstr-lit
                        _ space
                        contents msg-entry]
-                      (-> (filter string? contents) apply-str make-msgstr-node)))
+                      (-> (filter string? contents) apply-str)))
 
 (def meta-content
      (fnparse/rep+ (fnparse/except pofile-char line-break)))
 
 (def comment-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "#." nb-char-lit)
-                                 (make-scalar-node "#.")))
+     (fnparse/lit-conc-seq "#." nb-char-lit))
 
 (def comment-entry
      (fnparse/rep* (fnparse/complex [_ comment-lit
@@ -143,8 +131,7 @@
                                     (apply-str contents))))
 
 (def reference-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "#:" nb-char-lit)
-                                 (make-scalar-node "#:")))
+     (fnparse/lit-conc-seq "#:" nb-char-lit))
 
 (def reference-entry
      (fnparse/rep* (fnparse/complex [_ reference-lit
@@ -154,8 +141,7 @@
                                     (apply-str contents))))
 
 (def tcomment-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "#" nb-char-lit)
-                                 (make-scalar-node "#")))
+     (fnparse/lit-conc-seq "#" nb-char-lit))
 
 (def tcomment-entry
      (fnparse/rep* (fnparse/complex [_ tcomment-lit
@@ -165,8 +151,7 @@
                                     (apply-str contents))))
 
 (def flag-lit
-     (fnparse/constant-semantics (fnparse/lit-conc-seq "#," nb-char-lit)
-                                 (make-scalar-node "#,")))
+     (fnparse/lit-conc-seq "#," nb-char-lit))
 
 (def flag-entry
      (fnparse/rep*
@@ -195,3 +180,12 @@
                         #(error-kit/raise parse-error "leftover data after a valid node \"%s\""
                                 (apply-str (remainder-a %2)))
                         (struct state-s tokens 0 0))))
+
+(defn create-pofile [tokens]
+  (map #(struct node-s
+                (first %)
+                (nth % 1)
+                (nth % 2)
+                (nth % 3)
+                (nth % 4)
+                (nth % 5)) (parse tokens)))
