@@ -5,20 +5,10 @@
             [clojure.contrib.error-kit :as error-kit]
             [clojure.contrib.seq-utils :as seq-utils]))
 
-(defstruct node-s
-  :tcomment
-  :comment
-  :reference
-  :msgid
-  :msgstr)
-
 (defstruct state-s :remainder :column :line)
 
 (def remainder-a
      (accessor state-s :remainder))
-
-(def make-node
-     (partial struct node-s))
 
 (defn- nb-char [subrule]
   (fnparse/invisi-conc subrule (fnparse/update-info :column inc)))
@@ -161,6 +151,14 @@
                         _ line-break]
                        (apply-str contents))))
 
+;; (def header-msgid-entry
+;;      (fnparse/complex [_ msgid-lit
+;;                        _ space
+;;                        _ (fnparse/rep= 2 string-delimiter)]))
+
+;; (def header-entry
+;;      (fnparse/cond msgid-entry))
+
 (def poentry
      (fnparse/conc tcomment-entry
                    comment-entry
@@ -172,7 +170,7 @@
 (def pofile
      (fnparse/rep* poentry))
 
-(defn parse [tokens]
+(defn parse-pofile [tokens]
   (binding [fnparse/*remainder-accessor* remainder-a]
     (fnparse/rule-match pofile
                         #(error-kit/raise parse-error "invalid document \"%s\""
@@ -181,11 +179,23 @@
                                 (apply-str (remainder-a %2)))
                         (struct state-s tokens 0 0))))
 
-(defn create-pofile [tokens]
+(defn join-lines [line]
+  (apply str (interpose " " line)))
+
+; gettext entry item
+(defstruct node-s
+  :tcomment
+  :comment
+  :occurences
+  :flags
+  :msgid
+  :msgstr)
+
+(defn parse [tokens]
   (map #(struct node-s
-                (first %)
-                (nth % 1)
+                (join-lines (first %))
+                (join-lines (nth % 1))
                 (nth % 2)
                 (nth % 3)
                 (nth % 4)
-                (nth % 5)) (parse tokens)))
+                (nth % 5)) (parse-pofile tokens)))
