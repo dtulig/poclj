@@ -66,13 +66,14 @@
                         escaped-characters))
 
 (def char-sequence
-     (fnparse/except string-delimiter (fnparse/rep+ pofile-char)))
+     (fnparse/rep+ (fnparse/except pofile-char
+                                   string-delimiter)))
 
 (def escape-sequence
      (fnparse/complex [_ escape-indicator
-                       fnparse/character (fnparse/alt char-sequence
-                                                      normal-escape-sequence)]
-                      fnparse/character))
+                       character (fnparse/alt pofile-char
+                                              normal-escape-sequence)]
+                      character))
 
 (def string-char
      (fnparse/alt escape-sequence unescaped-char))
@@ -151,13 +152,33 @@
                         _ line-break]
                        (apply-str contents))))
 
-;; (def header-msgid-entry
-;;      (fnparse/complex [_ msgid-lit
-;;                        _ space
-;;                        _ (fnparse/rep= 2 string-delimiter)]))
+(def header-msgid-entry
+     (fnparse/conc msgid-lit
+                   space
+                   (fnparse/rep= 2 string-delimiter)
+                   line-break))
 
-;; (def header-entry
-;;      (fnparse/cond msgid-entry))
+(def header-msgstr-entry
+     (fnparse/conc msgstr-lit
+                   space
+                   (fnparse/rep= 2 string-delimiter)
+                   line-break))
+
+(def header-item
+     (fnparse/complex [_ string-delimiter
+                       key (fnparse/rep+ (fnparse/except fnparse/anything
+                                                         (nb-char-lit \:)))
+                       _ (nb-char-lit \:)
+                       value (fnparse/rep+ (fnparse/except fnparse/anything
+                                                           string-delimiter))
+                       _ string-delimiter
+                       _ (fnparse/rep* line-break)]
+                      [(apply-str key) (str-utils2/trim (apply-str value))]))
+
+(def header-entry
+     (fnparse/conc header-msgid-entry
+                   header-msgstr-entry
+                   (fnparse/rep* header-item)))
 
 (def poentry
      (fnparse/conc tcomment-entry
@@ -165,16 +186,21 @@
                    reference-entry
                    flag-entry
                    msgid-entry
-                   msgstr-entry))
+                   msgstr-entry
+                   (fnparse/rep* line-break)))
 
 (def pofile
-     (fnparse/rep* poentry))
+     (fnparse/conc header-entry
+                   (fnparse/rep* line-break)
+                   (fnparse/rep* poentry)))
 
 (defn parse-pofile [tokens]
   (binding [fnparse/*remainder-accessor* remainder-a]
     (fnparse/rule-match pofile
-                        #(error-kit/raise parse-error "invalid document \"%s\""
-                                (apply-str (remainder-a %)))
+                        #(error-kit/raise parse-error
+                                          %
+                                          "%s"
+                                          (remainder-a %))
                         #(error-kit/raise parse-error "leftover data after a valid node \"%s\""
                                 (apply-str (remainder-a %2)))
                         (struct state-s tokens 0 0))))
@@ -198,4 +224,4 @@
                 (nth % 2)
                 (nth % 3)
                 (nth % 4)
-                (nth % 5)) (parse-pofile tokens)))
+                (nth % 5)) (nth (parse-pofile tokens) 2)))
