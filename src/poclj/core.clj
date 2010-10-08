@@ -189,10 +189,34 @@
                    msgstr-entry
                    (fnparse/rep* line-break)))
 
+(def obsolete-poentry
+     (fnparse/conc obsolete-msgid
+                   obsolete-msgstr
+                   (fnparse/rep* line-break)))
+
+(def obsolete-lit
+     (fnparse/lit-conc-seq "#~" nb-char-lit))
+
+(def obsolete-msgid
+     (fnparse/rep*
+      (fnparse/complex [_ obsolete-lit
+                        _ space
+                        contents msgid-entry]
+                       (apply-str contents))))
+
+(def obsolete-msgstr
+     (fnparse/rep*
+      (fnparse/complex [_ obsolete-lit
+                        _ space
+                        contents msgstr-entry]
+                       (apply-str contents))))
+
 (def pofile
      (fnparse/conc header-entry
                    (fnparse/rep* line-break)
-                   (fnparse/rep* poentry)))
+                   (fnparse/rep* poentry)
+                   (fnparse/rep* line-break)
+                   (fnparse/rep* obsolete-poentry)))
 
 (defn parse-pofile [tokens]
   (binding [fnparse/*remainder-accessor* remainder-a]
@@ -218,10 +242,14 @@
   :msgstr)
 
 (defn parse [tokens]
-  (map #(struct node-s
-                (join-lines (first %))
-                (join-lines (nth % 1))
-                (nth % 2)
-                (nth % 3)
-                (nth % 4)
-                (nth % 5)) (nth (parse-pofile tokens) 2)))
+  (let [parsed-pofile (parse-pofile tokens)]
+    [(map #(struct node-s
+                   (join-lines (first %))
+                   (join-lines (nth % 1))
+                   (nth % 2)
+                   (nth % 3)
+                   (nth % 4)
+                   (nth % 5)) (nth parsed-pofile 2))
+     (map #(struct node-s nil nil nil nil (nth % 0)
+                   (nth % 1))
+          (nth parsed-pofile 4))]))

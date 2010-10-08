@@ -3,4 +3,5 @@
   :dependencies [[org.clojure/clojure "1.2.0-master-SNAPSHOT"]
                  [org.clojure/clojure-contrib "1.2.0-SNAPSHOT"]
                  [fnparse "2.2.6"]]
-  :dev-dependencies [[swank-clojure "1.2.1"]])
+  :dev-dependencies [[swank-clojure "1.2.1"]]
+  :jvm-opts ["-Dswank.encoding=UTF-8"])
